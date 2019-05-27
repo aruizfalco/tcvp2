@@ -10,17 +10,17 @@ La actividad ha sido realizada por:
 
 # Ficheros de Código Fuente
 
-src/tcpvp2.Rmd: Fichero en R Markdown preparado para su ejecución en R Studio.
-src/tcpvp2-header.html: Cabecera html para la generación del documento web por R Studio
+- src/tcpvp2.Rmd: Fichero en R Markdown preparado para su ejecución en R Studio.
+- src/tcpvp2-header.html: Cabecera html para la generación del documento web por R Studio
 
 # Documentos
 
-pdf/tcpvp2.pdf: Salida en pdf de la ejecución de tcpvp2.Rmd por R Studio.
-pdf/tcpvp2.html: Salida en html de la ejecución de tcpv2.Rmd por R Studio.
+- pdf/tcpvp2.pdf: Salida en pdf de la ejecución de tcpvp2.Rmd por R Studio.
+- pdf/tcpvp2.html: Salida en html de la ejecución de tcpv2.Rmd por R Studio.
 
 # Ficheros de Datos
 
-csv/runnings.csv: Fichero original de datos de carreras populares en 2019 en España.
-csv/runnings_clean.csv: Fichero grabado por R Studio después de los procedimientos de limpieza.
+- csv/runnings.csv: Fichero original de datos de carreras populares en 2019 en España.
+- csv/runnings_clean.csv: Fichero grabado por R Studio después de los procedimientos de limpieza.
 
 # Recursos
