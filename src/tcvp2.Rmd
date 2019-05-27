@@ -1,0 +1,502 @@
+---
+title: 'Carreras deportivas en España en 2019'
+author: "Autores: Eugenio Carmona Soriano y Antonio Ruíz Falcó Rojas"
+date: "Mayo 2019"
+output:
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+  documentclass: article
+  classoption: a4paper
+  word_document: default
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: tcvp2-header.html
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval=T, echo=T)
+```
+
+******
+
+# Descripción del DataSet.
+
+El conjunto de datos utilizado en esta actividad es el generado en la primera práctica mediante web scraping, y recoge los eventos de carreras deportivas que se realizan en España el año 2019. Las variables que se recogen en el conjunto de datos son la fecha, el nombre, el lugar, el tipo de carrera, la distancia, la página web de la carrera y si incluye categorías infantiles.
+
+Para cada carrera, se crea un registro en el conjunto de datos que recogen los siguientes campos para todo el año 2019:
+
+- **Fecha**: el día en el que se realiza la carrera en formato dd/mm/aaaa.
+- **Carrera**: Nombre de la carrera.
+- **Ciudad**: Ciudad en la que se realiza la carrera.
+- **Provincia**: Provincia en la que se realiza la carrera.
+- **Tipo**: Tipo de carrera. Ruta, Trail, Triatlón, Ciclismo, Duatlón, Obstáculos y Cross/Tierra.
+- **Distancia**: La distancia a recorrer en la carrera:
+- **Web**: Enlace a la página web de la carrera.
+- **Infantil**: Si o No. Según incluya o no categorías infantiles.
+
+Los datos son importantes, pues el conjunto de datos se corresponde con las competiciones deportivas, más concretamente carreras deportivas, que se realizan en España el año 2019. Se incluyen varios tipos de carreras entre los que encuentran: Rutas, Trails, Triatlón, Ciclismo, Duatlón, Obstáculos y Cross/Tierra.
+
+La página web elegida para obtener la información la ofrece a titulo informativo a todo aquel que quiera conocer las diferentes competiciones que se realizan, el lugar y la fecha. Además de ofrecer el enlace a la página web oficial de cada carrera.
+
+Es evidente que el *footing* o *running* es la actividad física básica. El estudio de los datos permitirá adquirir conocimiento sobre la práctica de deporte popular. Por ejemplo, permitirá estudiar si la actividad física cambia de unas regiones a otras, la distribución de pruebas a lo largo del año, diferenciación entre las competiciones de niños y adultos, etc. En el presente trabajo se realizarán los siguientes estudios:
+
+- Detección de las **reglas de asociación** entre mes de la prueba, provincia de la prueba, tipo de carrera, distancia y si es infantil o no.
+- Detección de grupos mediante **Árboles de decisión** para los campos anteriores.
+- Estudio de **regresión múltiple**.
+
+
+# Datos de Interés.
+
+En el apartado anterior se ha mostrado que el conjunto de datos tiene ocho atributos, pero no todos ellos son igual de útiles para proporcionar conocimiento:
+
+- **Fecha** muestra la fecha de la celebración de la carrera. El estudio de fechas concretas de celebración de carreras carece de interés, más allá de que si se realizara una búsqueda el 31 de diciembre se encontrarían las clásicas de San Silvestre. Sin embargo, el tratamiento agregado de fechas puede dar información realmente útil. A priori, podrían pensarse en tres tipos de agrupaciones de fechas: agrupación por mes, agrupación por trimestre y agrupación por estación del año. Cualquiera de ellas puede proporcionar información valiosa. Para este estudio utilaremos la agregación por estación (invierno, primavera, verano, otoño). Como es lógico, la variable resultante será discreta.
+- El **Nombre** de la carrera es útil para distinguir una carrera de otra, o como mnemotécnico para referirse a una carrera. Sin embargo, no proporciona información útil para el estudio.
+- La **Ciudad** aporta información geográfica, por lo que es útil. No obstante, existe la columna **Provincia**, que no deja de ser agregación de ciudades. Por tanto, se utilizará provincia para el estudio. 
+-	**Tipo** es una variable discreta que aporta información útil sobre la modalidad de la prueba, por lo que debe formar parte del estudio.
+-	**Distancia**: es la variable fundamental para el estudio.
+- **Web**: enlace a la página web de la carrera. No se utilizará para el estudio.
+- **Infantil**: variable discreta que representa la categoría de la carrera: infantil o adultos. Participará en el estudio.
+
+Por tanto, de todos los atribuitos del dataset, los que se utilizarán para el estudio son **Estación** (se convertirá la fecha en la estación del año a la que pertenece), **Provincia**, **Tipo**, **Distancia** e **Infantil**. No se utilizarán el Nombre, Ciudad y Web.
+
+## Lectura del fichero.
+
+En primer lugar, hay que leer el fichero runnings.csv, que se obtuvo utilizando técnicas de web scraping sobre la página web https://www.corriendovoy.com/calendario-carreras. Para la lectura, hay que tener en cuenta que el separador de columnas es ";" (punto y coma) y no "," (coma).
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Se carga el archivo de datos
+datos<-read.csv("../csv/runnings.csv", header=T, sep=";", encoding="UTF-8")
+attach(datos)
+# Se visualizan los datos fundamentales del archivo.
+dim(datos)
+str(datos)
+```
+
+Como puede apreciarse, el fichero contiene 5550 registros además del registro de cabecera. Todos los atributos son leídos como factor, lo que es lógico dada su naturaleza.
+
+# Limpieza de los datos.
+
+## Datos vacíos y otros tratamientos de limpieza.
+
+Para la limpieza de datos se utilizarán los siguientes criterios:
+
+- Se analizarán los datos vacíos en todos los casos y se actuará en consecuencia.
+- Todas las cadenas de caracteres se normalizarán a mayúsculas.
+- En las variables discretas se analizarán los casos existentes, posibles duplicidades por errores tipográficos, etc.
+- Se tratarán todos los campos con los criterios mencionados, incluso los que no participarán en el estudio, por si en un momento posterior se decide que participen en el análisis.
+
+A continuación se realiza la limpieza de los ocho campos del dataset.
+
+### Atributo Fecha
+
+**Fecha** no contiene datos vacíos. Ahora bien, es necesario realizar el agrupamiento mencionado en el apartado anterior para agrupar por estación del año.
+
+R ha tomado el campo fecha como un factor. El formato del mismo es "AAAA-MM-DD hh:mm:ss". Para el tratamiento deseado, debe convertirse el campo a la estación del año correspondiente. Para hacerlo, en vez de convertir la columna fecha (y perderla), se creará una nueva columna. Para realizar la conversión se crea la función toSeason, que recibe como entrada el vector de fechas a convertir en la estación correspondiente. El propósito es crear una columna nueva, llamada **Estacion**, que será un factor con cuatro posibilidades: SPRING, SUMMER, FALL y WINTER.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# En primer lugar, se define la función toSeason para convertir la fecha en la estación anual
+toSeason <- function(dat) {
+
+     scalarCheck <- function(dat) {
+       m <- as.POSIXlt(dat)$mon + 1        # correct for 0:11 range
+       d <- as.POSIXlt(dat)$mday           # correct for 0:11 range
+       if ((m == 3 & d >= 21) | (m == 4) | (m == 5) | (m == 6 & d < 21)) {
+           r <- 1
+       } else if ((m == 6 & d >= 21) | (m == 7) | (m == 8) | (m == 9 & d < 21)) {
+           r <- 2
+       } else if ((m == 9 & d >= 21) | (m == 10) | (m == 11) | (m == 12 & d < 21)) {
+           r <- 3
+       } else {
+           r <- 4
+       }
+       r
+   }
+
+   res <- sapply(dat, scalarCheck)
+   res <- ordered(res, labels=c("SPRING", "SUMMER", "FALL", "WINTER"))
+   invisible(res)
+}
+# Se llama a la función para crear la nueva columna.
+datos$Estacion<-toSeason(datos$Fecha)
+# Se muestra el sumario de la tabla para ver el resumen de casos.
+summary(datos)
+```
+
+Una vez ejecutada la función toSeason para convertir la fecha a la estación correspondiente, se utiliza la función summary() para ver el resumen de los datos. Como se aprecia en los resultados, con algo tan simple ya se ha obtenido una información muy significativa, pues se ve claramente que la primavera y el invierno se concentran la mayoría de pruebas (2.121 y 2.426 respectivamente), mientras que llama la atención el reducido número de pruebas que hay en verano (474) y otoño (529).
+
+### Atributo Carrera
+
+Este atributo contiene el nombre de la carrera y no se utilizará en el presente estudio. No obstante, se convertirá a mayúsculas para homogeneizar el campo por si se deseara para algún tratamiento posterior.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Se convierte Carrera a mayúsculas
+datos$Carrera <- as.factor(toupper(datos$Carrera))
+```
+
+### Atributo Ciudad
+
+Este atributo contiene el nombre de la ciudad donde se celebra la carrera y no se utilizará en el presente estudio, porque se utilizará el dato agregado de provincia. No obstante, se convertirá a mayúsculas para homogeneizar el campo por si se deseara para algún tratamiento posterior.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Se convierte Ciudad a Mayúsculas
+datos$Ciudad <- as.factor(toupper(datos$Ciudad))
+```
+
+### Atributo Provincia
+
+Este atributo contiene el nombre de la provincia donde se celebra la carrera. Se utilizará en el estudio, y tal como se ha indicado se convertirá a mayúsculas. Una vez hecha la conversión, se llama a la función summary(datos$Provincia) para ver los resultados:
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Se convierte Provincia a Mayúsculas
+datos$Provincia <- as.factor(toupper(datos$Provincia))
+
+# Se muestran los resultados
+summary(datos$Provincia)
+```
+
+Al ver el summary(datos$Provincia) se extraen varias conclusiones. La primera y más importante, es que la conversión se ha realizado de forma correcta. También se observa que en los datos no sólo hay pruebas españolas, pues figuran 20 registros de "REST OF THE WORLD" y 2 registros "MARRUECOS", 24 de Portugal, 1 de Francia y 12 de Andorra. A continuación, se asignan esos registros como "REST OF THE WORLD", de forma que el campo provincia sea o bien una provincia española o bien el resto del mundo.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Se convierte "MARRUECOS" a "REST OF THE WORLD"
+datos$Provincia <- as.factor(gsub("MARRUECOS", "REST OF THE WORLD", datos$Provincia))
+# Se convierte "PORTUGAL" a "REST OF THE WORLD"
+datos$Provincia <- as.factor(gsub("PORTUGAL", "REST OF THE WORLD", datos$Provincia))
+# Se convierte "ANDORRA" a "REST OF THE WORLD"
+datos$Provincia <- as.factor(gsub("ANDORRA", "REST OF THE WORLD", datos$Provincia))
+# Se convierte "FRANCIA" a "REST OF THE WORLD"
+datos$Provincia <- as.factor(gsub("FRANCIA", "REST OF THE WORLD", datos$Provincia))
+# Se muestran los resultados
+summary(datos$Provincia)
+```
+
+A simple vista, llama la atención que Valencia, con una población inferior a Barcelona y un clima similar, tiene un número de carreras superior. De hecho, el número de pruebas en Valencia (439) se asemeja al de Madrid (473)
+
+### Atributo Tipo
+
+Este atributo contiene el tipo de la prueba que se celebrará. Se utilizará en el estudio, y tal como se ha indicado se convertirá a mayúsculas. Una vez hecha la conversión, se llama a la función summary(datos$Tipo) para ver los resultados:
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Se convierte Tipo a Mayúsculas
+datos$Tipo <- as.factor(toupper(datos$Tipo))
+# Se muestran los resultados
+summary(datos$Tipo)
+```
+
+En los resultados se muestran los siete tipos posible de pruebas que hay en el dataset: 668 pruebas de ciclismo, 339 de cross, 335 de duatlón, 103 de obstáculas, 2328 de running, 1432 de trail y 345 triatlón.
+
+### Atributo Distancia
+
+No contiene datos vacíos y se utilizará en el estudio. Además, deben homogeneizarse las unidades: la columna es un campo de texto en el que expresa distancia en diferentes formatos y unidades: km, metros. Debe elegirse un formato numérico (por ejemplo, normalizar todas las medidas a metros) y realizar la conversión correspondiente. Una vez que se hayan homogeneizado las distancias a la misma unidad, hay que convertir la columna a enteros.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Se convierte " km" a "000"
+datos$Distancia <- as.factor(gsub(" Km", "000", datos$Distancia))
+# Se suprime " m"
+datos$Distancia <- as.factor(gsub(" m", "", datos$Distancia))
+# Se quita la coma que separa las unidades de millar
+datos$Distancia <- as.factor(gsub(",", "", datos$Distancia))
+# Se muestran los resultados
+summary(datos$Distancia)
+```
+
+En este punto ya están los datos listos para ser convertidos a numéricos, con las unidades homogeneizadas a metros. Se observa que algunos organizadores han utilizado unidades de medida diferentes para pruebas similares. Esto se ve bien claro en algunos ejemplo de Maratón. Los organizadores que han utilizado km han puesto "42km", mientras que los que han utilizado metros han puesto la cifra exacta de 42.195m. Dado que se trata de la cifra proporcionada por los organizadores y que será tratada numéricamente, se asumen esos pequeños errores.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Se quitan los ceros a la izquierda para la conversión a enteros.
+datos$Distancia <- gsub("(^|[^0-9])0+", "\\1", datos$Distancia, perl = TRUE)
+# Se convierte datos$Distancia a entero
+datos$Distancia <- strtoi(datos$Distancia)
+# Se muestran los resultados
+summary(datos$Distancia)
+```
+
+Como se ve en el sumario, la distancia mínima son 54 metros, y la máxima 725 kilómetros. La mediana son 12 kilómetros y la media son algo más de 23km.
+
+### Atributo Web
+
+Este atributo contiene la url de la carrera, donde puede obtenerse toda la información así como inscribirse en la misma. No se utilizará en el presente estudio, porque se utilizará el dato agregado de provincia. No obstante, se convertirá a mayúsculas para homogeneizar el campo por si se deseara para algún tratamiento posterior.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Se convierte la Web a Mayúsculas
+datos$Web<- as.factor(toupper(datos$Web))
+```
+
+### Atributo Infantil
+
+Es un factor que acepta dos valores: true si la prueba es infantil y false si no lo es. No hay datos vacíos ni de ninguna otra índole, así que la única conversión necesaria es la conversión a mayúsculas para homogeneizar con el resto.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Se convierte la Web a Mayúsculas
+datos$Infantil <- as.factor(toupper(datos$Infantil))
+```
+
+### Resumen
+
+Una vez realizado todos los procesos de limpieza necesarios en todos los campos, a continuación se muestra el sumario del dataset y los primeros registros del mismo.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Se muestra el sumario de los datos
+summary(datos)
+# Se muestran los primeros registros del dataset
+head(datos)
+```
+
+## Identificación y tratamiento de datos extremos.
+
+El único campo que puede tener valores extremos es Distancia, pues el resto son factores con un nñumero de posibilidades limitada. Para detectar outliers, la forma más fácil es mediante un boxplot:
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Detección de outliers en el campo Distancia
+boxplot(datos$Distancia)
+```
+
+No obstante, hacerlo así no tiene mucho sentido. Una distancia de 200km puede ser un outlier si se trata de una competición de footing, pero puede darse en ciclismo. Por tanto, la forma de analizar los outliers debe ser por tipo de prueba:
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Detección de outliers en el campo Distancia
+boxplot(Distancia ~ Tipo, data = datos, names=c("Ciclismo", "Cross", "Duatlón", "Obstác.", "Running", "Trail", "Triatlón"))
+```
+
+Como se ve en el gráfico, hay outliers en Ciclismo, Running, Trail y Triatlon. La duda es de si son realmente outliers o se trata de pruebas muy extremas. Es muy significativo que en Cross, Duatlón y Obstáculos no existen, por lo que lo más probable es que se traten de pruebas extremas que están muy de moda últimamente.
+
+# Análisis de los datos
+
+## Selección de los grupos de datos
+
+Los atributos que se utilizarán en el estudio son los indicados anteriormente: Estación, Provincia, Tipo, Distancia e Infantil. Son los parámetros fundamentales de las pruebas deportivas:
+
+- En qué estación del año se celebran.
+- Dónde se celebran. Se utilizará el dato disponible, que es la provincia. Pudiera ser interesante hacer una agrupación por comunidades autónomas. También hay que tener en cuenta que, después de la limpieza de datos, además de las provincias españolas hay una categoría adicional "resto del mundo". Esta categoría incluye todas las pruebas anunciadas en la web utilizada en el estudio y que no se celebran en España.
+- Tipo de prueba que se celebra.
+- Distancia de la prueba.
+- La prueba dispone de categoría infantil..
+
+**Es decir, los atributos seleccionados representan la información del cuándo (Estacion), dónde (Provincia), qué (Tipo), cuánto (Distancia), quién (Adultos o Infantil y Adultos), que son las cuestiones básicas respecto a cualquier problema.**
+
+Los estudios que se plantea realizar son los indicados anteriormente:
+
+- Detección de las **reglas de asociación** entre mes de la prueba, provincia de la prueba, tipo de carrera, distancia y si es infantil o no.
+- Detección de grupos mediante **técnicas de clustering** para los campos anteriores.
+- Estudio de **regresión múltiple**.
+
+## Comprobación de la normalidad y homogenidad de la varianza
+
+En este apartado se hace un análisis ANOVA contrastando la distancia y el tipo de prueba.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Cálculo de ANOVA Distancia vs. Tipo
+anova <- aov(Distancia ~ Tipo, data = datos)
+summary(anova)
+plot(anova)
+```
+
+## Aplicación de pruebas
+
+### Reglas de asociación
+
+En este punto se utilizará el algoritmo *apriori* para obtener las reglas de asociación del conjunto de datos. Para ello hay que convertir la variable numérica distancia en un factor. Para ello se creará una nueva columna, llamada DistanciaF, en la que se categorizará la distancia de la siguiente forma:
+
+- CORTA: $\leqslant$ 1km.
+- MEDIA: $>$ 1km y $\leqslant$ 5km.
+- LARGA: $>$ 5km y $\leqslant$ 20km.
+- FONDO: $>$ 20km y $\leqslant$ 50km.
+- GRAN FONDO: $>$ 50km y $\leqslant$ 100km.
+- ULTRAMARATÓN: $>$ 100km.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+datos$DistanciaF <-cut (datos[["Distancia"]], breaks=c(0, 1000, 5000, 20000, 50000, 100000, 1000000), labels=c("CORTA", "MEDIA", "LARGA", "FONDO", "GRAN FONDO", "ULTRAMARATON"))
+table(datos$DistanciaF)
+```
+
+En la tabla anterior se muestra el número de pruebas de cada categoría.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Instalación (si es necesario) y carga de la librería arules
+if(!require(arules)){
+    install.packages('arules', repos='http://cran.rstudio.com')
+    library(arules)
+}
+# Instalación (si es necesario) y carga de la librería dplyr
+if(!require(dplyr)){
+    install.packages('dplyr', repos='http://cran.rstudio.com')
+    library(dplyr)
+}
+# Se ejecuta el modelo apriori en las columnas seleccionadas.
+rules <- apriori(select(datos, Estacion, Provincia, Tipo, DistanciaF, Infantil), parameter = list(supp = 0.01, conf = 0.85))
+```
+
+A continuación, se ordenan las reglas y se muestran las primeras:
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Se ordenan las reglas.
+rules <- sort(rules, by="confidence", decreasing=TRUE)
+# Se muestran las reglas.
+inspect(rules[1: 10], ruleSep = "---->", itemSep = " + ", setStart = "", setEnd ="", linebreak = FALSE)
+```
+
+Como se ve de los datos mostrados, se han encontrado 46 reglas. Por ejemplo, la primera regla es "Si la provincia es VALENCIA y la distancia es MEDIA (entre 1 y 5 km), entonces el tipo de carrera es RUNNING".
+
+### Árboles de decisión
+
+El siguiente estudio a realizar también tiene que ver con la clasificación, y para ello se utilizarán árboles de decisión. Los datos ya se encuentran en el formato adecuado para ello, pues todas las variables que que utilizarán están factorizadas. En este caso se utilizarán las mismvas variables del punto anterior.
+
+Lo primero que hay que realizar es dividir el dataset en dos subconjuntos, uno de test y otro de training. El conjunto de entrenamiento tendrá 2/3 de los registros, y el de test tendrá el tercio restante. En primer lugar hay que desordenar los registros:
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Se desordenan los registros
+set.seed(666)
+# A continuación, se desordenan los datos.
+datos_random <- datos[sample(nrow(datos)),]
+```
+
+El siguiente paso es crear el conjunto de entrenamiento y el de prueba. La clasificación se hará por la columna DistanciaF.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Se inicializa la semilla
+set.seed(23542)
+# Se crean dos nuevas columnas: ProvinciaSA y TipoSA, suprimiendo los acentos para que el algoritmo C50 no tenga problemas
+datos_random$ProvinciaSA <- as.factor(iconv(Provincia, "UTF-8", "ASCII//TRANSLIT"))
+datos_random$TipoSA <- as.factor(iconv(Tipo, "UTF-8", "ASCII//TRANSLIT"))
+# Se utiliza la columna Distancia para la calsificación.
+cy <- as.factor(datos_random[,10])
+# Se seleccionan las otras tres columnas.
+cX <- select(datos_random, Estacion, TipoSA, ProvinciaSA, Infantil)
+
+# Se dividen los dos conjuntos
+ind = sample(1:nrow(datos_random), size=floor((2/3)*nrow(datos_random)))
+entrenX<-cX[ind,]
+entreny<-cy[ind]
+pruebaX<-cX[-ind,]
+pruebay<-cy[-ind]
+```
+
+A continuación, se genera el modelo utilizando el algoritmo C5.0:
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Instalación (si es necesario) y carga de la librería C50
+if(!require(C50)){
+    install.packages('C50', repos='http://cran.rstudio.com')
+    library(C50)
+}
+modelo <- C5.0(entrenX, entreny, rules=TRUE )
+summary(modelo)
+```
+
+Como se ve en los resultados mostrados, el algoritmo encuentra 28 reglas. Por ejemplo, la primera regla es "Si la estación es invierno, el tipo es Ciclismo, la provincia es Barcelona y es una prueba Infantil, entonces hay un 57% de probabilidad de que la distancia sea media".
+
+### Regresión Múltiple
+
+En este apartado se realizará la regresión múltiple entre los atributos Distancia, que es un atributo cualitativo y Estacion, Tipo, e Infantil que son cualitativos. La categoría de referencia para el Tipo será 
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+regmod <- (lm(Distancia ~ Tipo + Estacion + Infantil, data = datos))
+summary(regmod)
+```
+
+De los datos obtenidos se deduce que el tipo de prueba y la categoría (infantil o adulto) están fuertemente correlacionadas con la Distancia. La estación también lo está, pero en menor grado.
+
+Por otro lado, el valor de $R^2$ es 0,2908. Esto quiere decir que el modelo explica el 29% de la variabilidad de la variable Distancia.
+
+#### Grabación del fichero
+
+Se genera el fichero runnings_clean.csv, que incluye los procesos de limpieza y las variables generadas.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Se graba el fichero runnings_clean.csv
+write.csv(datos, file="../csv/runnings_clean.csv")
+```
+
+# Representación Gráfica
+
+En este apartado se mostrarán diferentes gráficos para una mejor comprensión de los datos.
+
+## Gráficos de tartas
+
+### Pruebas por Estación
+
+A continuación se muestra la tarta de pruebas por estación:
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Instalación (si es necesario) y carga de la librería ggplot2
+if(!require(ggplot2)){
+    install.packages('ggplot2', repos='http://cran.rstudio.com')
+    library(ggplot2)
+}
+# Se representa la tarta de pruebas por estación.
+Estacionsum <- summarize( group_by(datos, Estacion), n=length(Estacion))
+ggplot(Estacionsum, aes(x="", y=n, fill=Estacion)) + 
+  geom_bar(width = 1, stat = "identity") +
+    coord_polar("y", start=0) + ggtitle("Estacion")
+
+```
+
+### Pruebas por Tipo
+
+A continuación se muestra la tarta de pruebas por tipo:
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Se representa la tarta de pruebas por tipo.
+Tiposum <- summarize( group_by(datos, Tipo), n=length(Tipo))
+ggplot(Tiposum, aes(x="", y=n, fill=Tipo)) + 
+  geom_bar(width = 1, stat = "identity") +
+    coord_polar("y", start=0) + ggtitle("Tipo")
+
+```
+
+### Pruebas por Categoría (Infantil o Adulto)
+
+A continuación se muestra la tarta de pruebas por la categoría, Infantil o Adulto:
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Se representa la tarta de pruebas por categprçoa.
+Infantilsum <- summarize( group_by(datos, Infantil), n=length(Infantil))
+ggplot(Infantilsum, aes(x="", y=n, fill=Infantil)) + 
+  geom_bar(width = 1, stat = "identity") +
+    coord_polar("y", start=0) + ggtitle("Infantil")
+
+```
+
+## Diagramas de barras
+
+## Diagrama de pruebas por estación y categoría
+
+En el diagrama siguiente se muestran las pruebas que se celebran en cada estación, diferenciando las que son de categoría infantil y las de adulto. Es fácil extraer la conclusión que los seis meses correspondientes a la primavera y el invierno son los que concentran el mayor número de pruebas.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Se representa el diagrama por estación y categoría
+ggplot(data=datos[1:dim(datos)[1],],aes(x=Estacion, fill=Infantil))+geom_bar()
+```
+
+## Diagrama de pruebas por tipo y categoría
+
+En el diagrama siguiente se muestran las pruebas que se celebran de cada tipo diferenciando las que son de categoría infantil y las de adulto. En este caso, hay dos conclusiones obvias. La primera es que los dos tipos mayoritarios son running y trail. La segunda es que hay categorías que apenas se celebran en categoría infantil, como las pruebas ciclistas, trail y trialtón.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Se representa el diagrama por tipo y categoría
+ggplot(data=datos[1:dim(datos)[1],],aes(x=Tipo, fill=Infantil))+geom_bar()
+```
+
+# Conclusiones
+
+Del análisis realizado se extraen las siguientes conclusiones:
+
+* La mayoría de las pruebas se concentran en primavera e invierno, mientras que en verano y otoño se celebran muy pocas. En concreto, en los seis mese correspondientes a primavera e invierno se celebran cinco veces más pruebas que en verano y otoño: el 82% de las pruebas se celebran en los seis meses de primavera e invierno.
+* El dataset se ha obtenido de una página que se limita a publicitar qué pruebas se celebran. Sería interesante que el dataset incluyera el dato de número de inscritos, que permitiría obtener muchas más conclusiones.
+* Otro dato interesante a incorporar al dataser sería el de la población por provincia, para poder analizar su correlación con la celebración de pruebas. Es intuitivo pensar que sí deberían estar correlacionados, pero se han detectado casos que llaman la atención. Por ejemplo, en Valencia se celebran casi las mismas pruebas que en Madrid y muchas más que en Barcelona, que tiene mayor población y un clima similar.
+* El tipo de prueba mayoritaria es *running*, que se corresponde con la actividad física básica, y la segunda es *trail*, es decir, *running* campo a través. Entre ambas categorías suman casi el 70% de las pruebas.
+* Las variables Tipo, Distancia, Estación e Infantil están correlacionadas.
+* Las pruebas más duras (ciclismo, *trail* y triatlón) no se suelen celebrar en categoría infantil.
+
+# Contribuciones
+
+Contribuciones              | Firma
+----------------------------| ----------
+Investigación Previa        | ECS - ARFR
+Redacción de las Respuestas | ECS - ARFR
+Desarrollo Código           | ECS - ARFR
