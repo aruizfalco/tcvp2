@@ -250,20 +250,65 @@ head(datos)
 ## Identificación y tratamiento de datos extremos.
 
 El único campo que puede tener valores extremos es Distancia, pues el resto son factores con un nñumero de posibilidades limitada. Para detectar outliers, la forma más fácil es mediante un boxplot:
-
 ```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Instalación (si es necesario) y carga de la librería ggplot2
+if(!require(sampling)){
+    install.packages('sampling', repos='http://cran.rstudio.com')
+    library(sampling)
+}
+# Instalación (si es necesario) y carga de la librería ggplot2
+if(!require(DescTools)){
+    install.packages('DescTools', repos='http://cran.rstudio.com')
+    library(DescTools)
+}
+
+
 # Detección de outliers en el campo Distancia
-boxplot(datos$Distancia)
+info <- boxplot(datos$Distancia, horizontal = TRUE)
+
 ```
 
-No obstante, hacerlo así no tiene mucho sentido. Una distancia de 200km puede ser un outlier si se trata de una competición de footing, pero puede darse en ciclismo. Por tanto, la forma de analizar los outliers debe ser por tipo de prueba:
-
 ```{r echo=TRUE, message=TRUE, warning=TRUE}
-# Detección de outliers en el campo Distancia
-boxplot(Distancia ~ Tipo, data = datos, names=c("Ciclismo", "Cross", "Duatlón", "Obstác.", "Running", "Trail", "Triatlón"))
+headers <- c("Outliers", "Total", "% Outliers")
+df <- as.data.frame(matrix(NA,ncol=3,nrow=0))
+df <- rbind(df, "Distancia" = c(length(info$out), length(datos$Distancia), 100*(length(info$out)/length(datos$Distancia))))
+colnames(df)<-headers
+df
+
 ```
 
-Como se ve en el gráfico, hay outliers en Ciclismo, Running, Trail y Triatlon. La duda es de si son realmente outliers o se trata de pruebas muy extremas. Es muy significativo que en Cross, Duatlón y Obstáculos no existen, por lo que lo más probable es que se traten de pruebas extremas que están muy de moda últimamente.
+Como podemos observar de los 5550 registros tenemos un 7,35% (408 registros) que son outliers. No obstante, hacerlo así no tiene mucho sentido. Una distancia de 200km puede ser un outlier si se trata de una competición de footing, pero puede darse en ciclismo. Por tanto, la forma de analizar los outliers debe ser por tipo de prueba:
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+
+df <- as.data.frame(matrix(NA,ncol=3,nrow=0))
+
+tipos <- c("RUNNING","CICLISMO", "TRAIL", "DUATLÓN", "TRIATLÓN", "CROSS", "OBSTÁCUL.")
+
+
+for(tipo in tipos) {
+ 
+  par(oma=c(0,0,2,0))
+  sdatos <- subset(datos, Tipo == tipo)
+  info <- boxplot(sdatos$Distancia, horizontal = TRUE)
+  mtext(tipo, outer=TRUE, cex=1.5)
+  df <- rbind(df, tipo = c(length(info$out), length(sdatos$Distancia), 100*(length(info$out)/length(sdatos$Distancia))))
+  
+}
+```
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+headers <- c("Outliers", "Total", "% Outliers")
+colnames(df)<-headers
+rownames(df) = tipos
+df <- df[order(-df[,3]),]
+df
+
+```
+
+Como se puede observar en los gráficos y en la tabla anterior de forma númerica, en todos los tipos de carreras tenemos outliers; y principalmente en los tipos de carrera Duatlón y Triatlón con un 30,75% y un 18,55% de outliers respectivamente. Algo menos encontramos en Running, Ciclismo y Trail aunque con valores bastante significativos. La duda es de si son realmente outliers o se trata de pruebas muy extremas.
+
+Por último, en Obstáculos y cross prácticamente no tenemos outliers.
 
 # Análisis de los datos
 
@@ -287,13 +332,91 @@ Los estudios que se plantea realizar son los indicados anteriormente:
 
 ## Comprobación de la normalidad y homogenidad de la varianza
 
-En este apartado se hace un análisis ANOVA contrastando la distancia y el tipo de prueba.
+En este apartado realizaremos tests de normalidad y homocedasticidadaal atributo distancia para determinar que pruebas estadísticas debemos aplicar en la fase de análisi. Ejecutamos el test de Kolmogorov-Smirnov sobre el atributo distancia, que a pesar de lanzar un warning, nos indica que debemos rechazar la hipotesis nula y asumir que no sigue una distribución normal.
+
+### Test de normalidad del atributo Distancia
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+ks.test(datos$Distancia, pnorm, mean(datos$Distancia), sd(datos$Distancia))
+
+```
+
+Realizamos también el test Shapiro-Wilk, más robusto que el anterior, para comprobar si sigue una distribución normal. Previamente, para poder realizar el test debemos seleccionar una muestra más pequeña, cosa que haremos cogiendo una muestra aleatoria simple sin sustitución (SRSWOR).
 
 ```{r echo=TRUE, message=TRUE, warning=TRUE}
-# Cálculo de ANOVA Distancia vs. Tipo
-anova <- aov(Distancia ~ Tipo, data = datos)
-summary(anova)
-plot(anova)
+
+s=srswor(5000, length(datos$Distancia))
+
+shapiro.test(as.vector(datos$Distancia[s==1]))
+
+```
+
+Y como se comprueba por el valor d p-value confirmamos que los datos no siguen una distribución normal.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Instalación (si es necesario) y carga de la librería ggplot2
+if(!require(sampling)){
+    install.packages('sampling', repos='http://cran.rstudio.com')
+    library(sampling)
+}
+# Instalación (si es necesario) y carga de la librería ggplot2
+if(!require(DescTools)){
+    install.packages('DescTools', repos='http://cran.rstudio.com')
+    library(DescTools)
+}
+
+statsTipo <- vector()
+
+for(tipo in c("RUNNING","CICLISMO", "TRAIL", "DUATLÓN", "TRIATLÓN", "CROSS", "OBSTÁCUL.")) {
+  sdatos <- subset(datos, Tipo == tipo)
+  invisible(stats <- shapiro.test(sdatos$Distancia))
+  
+  statsTipo[tipo] <- stats$p.value
+
+  sdatos$Distancia.norm <- BoxCox(sdatos$Distancia, lambda = BoxCoxLambda(sdatos$Distancia))
+  par(mfrow=c(2,2), oma=c(0,0,2,0))
+  qqnorm(sdatos$Distancia)
+  qqnorm(sdatos$Distancia.norm)
+  hist(sdatos$Distancia)
+  hist(sdatos$Distancia.norm)
+  mtext(tipo, outer=TRUE, cex=1.5)
+  
+}
+
+
+```
+Para cada tipo de carrera creamos un subconjunto de los datos, normalizamos la distáncia y generamos los gráficos Q-Q y los histogramas de los datos sin normalizar (izquierda) y los datos normalizados (derecha). Visualmente es fácil comprobar como los datos de distancia no siguen una distribución normal y confirmamos los resultados obtenidos con los tests anteriores.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+statsTipo
+```
+Númericamente vemos como los valores de p-value para el test shapiro-Wilk de cada subconjunto de datos por tipo de carrera nos indica que ningún conjunto cumple la distribución de normalidad.
+
+
+Para comprobar la homocedasticidad en los datos, aplicamos el test Fligner-Killeen puesto que los datos no siguen una distribución normal. Y el resultado obtenido nos indica que a distancia presenta varianzas estadísticamente diferentes para los diferentes grupos.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Instalación (si es necesario) y carga de la librería ggplot2
+if(!require(sampling)){
+    install.packages('sampling', repos='http://cran.rstudio.com')
+    library(sampling)
+}
+# Instalación (si es necesario) y carga de la librería ggplot2
+if(!require(DescTools)){
+    install.packages('DescTools', repos='http://cran.rstudio.com')
+    library(DescTools)
+}
+
+# Detección de outliers en el campo Distancia
+datos$Distancia.norm <- BoxCox(datos$Distancia, lambda = BoxCoxLambda(datos$Distancia))
+fligner.test(Distancia.norm ~ Tipo, data = datos)
+
+```
+Una vez determinado que la distáncia no sigue una distribución normal ni presenta homocedasticidad, aplicamos el test de kruskal (no paramétrico) para comparar la distancia en función del tipo de carrera y obtenemos como resultado que la distància muestra diferencias significativas en función del tipo de carrera.
+
+```{r echo=TRUE, message=TRUE, warning=TRUE}
+# Test Kruskal
+kruskal.test(Distancia ~ Tipo, data = datos)
+
 ```
 
 ## Aplicación de pruebas
@@ -336,15 +459,16 @@ A continuación, se ordenan las reglas y se muestran las primeras:
 ```{r echo=TRUE, message=TRUE, warning=TRUE}
 # Se ordenan las reglas.
 rules <- sort(rules, by="confidence", decreasing=TRUE)
+
 # Se muestran las reglas.
-inspect(rules[1: 10], ruleSep = "---->", itemSep = " + ", setStart = "", setEnd ="", linebreak = FALSE)
+inspect(rules, ruleSep = "---->", itemSep = " + ", setStart = "", setEnd ="", linebreak = FALSE)
 ```
 
 Como se ve de los datos mostrados, se han encontrado 46 reglas. Por ejemplo, la primera regla es "Si la provincia es VALENCIA y la distancia es MEDIA (entre 1 y 5 km), entonces el tipo de carrera es RUNNING".
 
 ### Árboles de decisión
 
-El siguiente estudio a realizar también tiene que ver con la clasificación, y para ello se utilizarán árboles de decisión. Los datos ya se encuentran en el formato adecuado para ello, pues todas las variables que que utilizarán están factorizadas. En este caso se utilizarán las mismvas variables del punto anterior.
+El siguiente estudio a realizar también tiene que ver con la clasificación, y para ello se utilizarán árboles de decisión. Los datos ya se encuentran en el formato adecuado para ello, pues todas las variables que que utilizarán están factorizadas. En este caso se utilizarán las mismas variables del punto anterior.
 
 Lo primero que hay que realizar es dividir el dataset en dos subconjuntos, uno de test y otro de training. El conjunto de entrenamiento tendrá 2/3 de los registros, y el de test tendrá el tercio restante. En primer lugar hay que desordenar los registros:
 
@@ -364,7 +488,7 @@ set.seed(23542)
 datos_random$ProvinciaSA <- as.factor(iconv(Provincia, "UTF-8", "ASCII//TRANSLIT"))
 datos_random$TipoSA <- as.factor(iconv(Tipo, "UTF-8", "ASCII//TRANSLIT"))
 # Se utiliza la columna Distancia para la calsificación.
-cy <- as.factor(datos_random[,10])
+cy <- as.factor(datos_random[,11])
 # Se seleccionan las otras tres columnas.
 cX <- select(datos_random, Estacion, TipoSA, ProvinciaSA, Infantil)
 
@@ -464,22 +588,24 @@ ggplot(Infantilsum, aes(x="", y=n, fill=Infantil)) +
 
 ## Diagramas de barras
 
-## Diagrama de pruebas por estación y categoría
+## Diagrama de pruebas por Tipo y distancia
 
-En el diagrama siguiente se muestran las pruebas que se celebran en cada estación, diferenciando las que son de categoría infantil y las de adulto. Es fácil extraer la conclusión que los seis meses correspondientes a la primavera y el invierno son los que concentran el mayor número de pruebas.
+En el diagrama siguiente se muestran las pruebas que se celebran de cada tipo, diferenciando según la distáncia categorizada. En este caso, hay dos conclusiones obvias. La primera es que los dos tipos mayoritarios son running y trail. La segunda es que hay categorías de distancia en que apenas se celebran carreras como la distancia CORTA.
 
 ```{r echo=TRUE, message=TRUE, warning=TRUE}
 # Se representa el diagrama por estación y categoría
-ggplot(data=datos[1:dim(datos)[1],],aes(x=Estacion, fill=Infantil))+geom_bar()
+ggplot(data=datos[1:dim(datos)[1],],aes(x=Tipo, fill=DistanciaF))+geom_bar()
 ```
 
-## Diagrama de pruebas por tipo y categoría
+## Diagrama de pruebas por tipo y estación
 
-En el diagrama siguiente se muestran las pruebas que se celebran de cada tipo diferenciando las que son de categoría infantil y las de adulto. En este caso, hay dos conclusiones obvias. La primera es que los dos tipos mayoritarios son running y trail. La segunda es que hay categorías que apenas se celebran en categoría infantil, como las pruebas ciclistas, trail y trialtón.
+En el diagrama siguiente se muestran las pruebas que se celebran de cada tipo diferenciando según la estación. Es fácil extraer la conclusión que los seis meses correspondientes a la primavera y el invierno son los que concentran el mayor número de pruebas.
+
+
 
 ```{r echo=TRUE, message=TRUE, warning=TRUE}
 # Se representa el diagrama por tipo y categoría
-ggplot(data=datos[1:dim(datos)[1],],aes(x=Tipo, fill=Infantil))+geom_bar()
+ggplot(data=datos[1:dim(datos)[1],],aes(x=Tipo, fill=Estacion))+geom_bar()
 ```
 
 # Conclusiones
